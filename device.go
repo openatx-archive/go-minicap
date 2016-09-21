@@ -67,14 +67,14 @@ func (d *AdbDevice) shell(cmds ...string) (out string, err error) {
 
 func (d *AdbDevice) buildCommand(cmds ...string) (out *exec.Cmd) {
 	args := []string{}
-	args = append(args, "shell")
+	args = append(args, "-s", d.Serial, "shell")
 	args = append(args, cmds...)
 	return exec.Command(d.AdbPath, args...)
 }
 
 func (d *AdbDevice) shellNowait(cmds ...string) (out *exec.Cmd, err error) {
 	args := []string{}
-	args = append(args, "shell")
+	args = append(args, "-s", d.Serial, "shell")
 	args = append(args, cmds...)
 	cmd := exec.Command(d.AdbPath, args...)
 	err = cmd.Start()
