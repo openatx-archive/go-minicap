@@ -58,3 +58,11 @@ func main() {
 	}
 }
 ```
+
+## demo
+
+you can run the demo file ./demo/demo.go
+
+then you can visit http://127.0.0.1:5678 to see the screen in real-time. Like,
+
+![](demo/demo.png)
