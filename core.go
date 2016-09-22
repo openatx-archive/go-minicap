@@ -8,11 +8,8 @@
 package minicap
 
 import (
-	"io"
 	"math/rand"
 	"net"
-	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"unicode"
@@ -26,42 +23,6 @@ func splitLines(str string) (result []string) {
 	tmp := strings.Replace(str, "\r\n", "\n", -1)
 	tmp = strings.Replace(str, "\r", "", -1)
 	result = strings.Split(tmp, "\n")
-	return
-}
-
-func downloadFile(fileName string, url string) (err error) {
-	fout, err := os.Create(fileName)
-	if err != nil {
-		return
-	}
-	defer fout.Close()
-	response, err := http.Get(url)
-	if err != nil {
-		return
-	}
-	defer response.Body.Close()
-	_, err = io.Copy(fout, response.Body)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func downloadFileToDevice(fileName, dir, url string) (err error) {
-	fout, err := os.Create(fileName)
-	if err != nil {
-		return
-	}
-	defer fout.Close()
-	response, err := http.Get(url)
-	if err != nil {
-		return
-	}
-	defer response.Body.Close()
-	_, err = io.Copy(fout, response.Body)
-	if err != nil {
-		return
-	}
 	return
 }
 
