@@ -10,7 +10,6 @@ package minicap
 import (
 	"bufio"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -18,10 +17,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -30,32 +26,43 @@ import (
 
 var (
 	ErrAlreadyClosed = errors.New("already closed")
+	HOST             = "127.0.0.1"
 )
 
 type Options struct {
 	Serial string
-	Host   string
 	Port   int
 	Adb    string
 }
 
 type Service struct {
 	d        AdbDevice
-	ps       *exec.Cmd
+	proc     *exec.Cmd
 	port     int
 	host     string
 	r        Rotation
 	dispInfo DisplayInfo
 
-	closed   bool
-	imageC   chan image.Image
-	mu       sync.Mutex
-	imBuffer image.Image
+	closed    bool
+	imageC    chan image.Image
+	mu        sync.Mutex
+	lastImage image.Image
 }
 
+/*
+Create Minicap Service
+Description:
+Serial : device serialno
+Port(default: random): minicap service port
+Adb(default: adb): adb path
+Eg.
+	opt := Option{}
+	opt.Serial = "aaa"
+	service := minicap.NewService(opt)
+*/
 func NewService(option Options) (s Service, err error) {
 	s = Service{}
-	s.d, err = NewAdbDevice(option.Serial, option.Adb)
+	s.d, err = newAdbDevice(option.Serial, option.Adb)
 	if option.Port == 0 {
 		port, err := randPort()
 		if err != nil {
@@ -65,28 +72,26 @@ func NewService(option Options) (s Service, err error) {
 	} else {
 		s.port = option.Port
 	}
-	if option.Host == "" {
-		s.host = "localhost"
-	} else {
-		s.host = option.Host
-	}
+	s.host = HOST
 	s.closed = true
-	s.r, err = newRotation(option)
+	s.r, err = newRotationService(option)
 	if err != nil {
 		return
 	}
 	return
 }
 
-//install minicap
+/*
+Install minicap on device
+Eg.
+	service := minicap.NewService(opt)
+	err := service.Install()
+P.s.
+	Install function will download files, so keep network connected.
+*/
 func (s *Service) Install() (err error) {
 	err = s.r.install()
 	if err != nil {
-		return
-	}
-	isMinicapSoExisted, _ := s.d.isFileExisted("/data/local/tmp/minicap.so")
-	isMinicapExisted, _ := s.d.isFileExisted("/data/local/tmp/minicap")
-	if isMinicapExisted && isMinicapSoExisted {
 		return
 	}
 	abi, err := s.d.getProp("ro.product.cpu.abi")
@@ -97,42 +102,43 @@ func (s *Service) Install() (err error) {
 	if err != nil {
 		return
 	}
-	tmpDir := os.TempDir()
-	// download minicap.so from github
-	url := "https://github.com/openstf/stf/raw/master/vendor/minicap/shared/android-" + sdk + "/" + abi + "/minicap.so"
-	fileName := filepath.Join(tmpDir, "minicap.so")
-	err = downloadFile(fileName, url)
-	if err != nil {
-		return
-	}
-	//push minicap.so to device
-	_, err = s.d.run("push", fileName, "/data/local/tmp")
-	if err != nil {
-		return
-	}
-	//download minicap
-	url = "https://github.com/openstf/stf/raw/master/vendor/minicap/bin/" + abi + "/minicap"
-	fileName = filepath.Join(tmpDir, "minicap")
-	err = downloadFile(fileName, url)
-	if err != nil {
-		return
-	}
-	//push minicap to device
-	_, err = s.d.run("push", fileName, "/data/local/tmp")
-	if err != nil {
-		return
-	}
-	// chmod
-	cmdstr := "chmod 0755 /data/local/tmp/minicap"
-	_, err = s.d.shell(cmdstr)
-	if err != nil {
-		return
+	for _, filename := range []string{"minicap.so", "minicap"} {
+		isExists := s.d.isFileExists("/data/local/tmp/" + filename)
+		if isExists {
+			continue
+		}
+		// download file from github
+		var url string
+		if filename == "minicap.so" {
+			url = "https://github.com/openstf/stf/raw/master/vendor/minicap/shared/android-" + sdk + "/" + abi + "/minicap.so"
+		} else {
+			url = "https://github.com/openstf/stf/raw/master/vendor/minicap/bin/" + abi + "/minicap"
+		}
+		fName := "/data/local/tmp/" + filename
+		err = s.r.download(fName, url)
+		if err != nil {
+			return
+		}
 	}
 	return
 }
 
-//check minicap
+/*
+Check whether minicap is supported on the device
+Eg.
+	service := minicap.NewService(opt)
+	supported := service.IsSupported()
+
+For more information, see: https://github.com/openstf/minicap
+*/
 func (s *Service) IsSupported() bool {
+	fileExists := s.d.isFileExists("/data/local/tmp/minicap")
+	if !fileExists {
+		err := s.Install()
+		if err != nil {
+			return false
+		}
+	}
 	out, err := s.d.shell("LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -i")
 	if err != nil {
 		return false
@@ -141,46 +147,32 @@ func (s *Service) IsSupported() bool {
 	return supported
 }
 
-//get Fps
-func (s *Service) FPS() (fps int, err error) {
-	out, err := s.d.shell("LD_LIBRARY_PATH=/data/local/tmp /data/local/tmp/minicap -i")
-	if err != nil {
-		return 0, err
-	}
-	supported := strings.Contains(out, "height") && strings.Contains(out, "width") && strings.Contains(out, "fps")
-	if !supported {
-		return 0, errors.New("minicap not supported")
-	}
-	//json str 转map
-	var dat map[string]interface{}
-	if err := json.Unmarshal([]byte(out), &dat); err == nil {
-		fpsStr := fmt.Sprintf("%v", dat["fps"])
-		fps, err := strconv.Atoi(fpsStr)
-		return fps, err
-	} else {
-		return 0, err
-	}
-
-}
-
-// uninstall minicap
+/*
+Uninstall minicap service
+Remove minicap on the device
+Eg.
+	service := minicap.NewService(opt)
+	err := service.Uninstall()
+*/
 func (s *Service) Uninstall() (err error) {
-	isMinicapExisted, _ := s.d.isFileExisted("/data/local/tmp/minicap.so")
-	if isMinicapExisted {
-		if _, err := s.d.shell("rm /data/local/tmp/minicap.so"); err != nil {
-			return err
+	for _, filename := range []string{"minicap.so", "minicap"} {
+		fileExists := s.d.isFileExists("/data/local/tmp/" + filename)
+		if fileExists {
+			if _, err := s.d.shell("rm /data/local/tmp/" + filename); err != nil {
+				return err
+			}
 		}
 	}
-	isMinicapsoExisted, _ := s.d.isFileExisted("/data/local/tmp/minicap")
-	if isMinicapsoExisted {
-		if _, err := s.d.shell("rm /data/local/tmp/minicap"); err != nil {
-			return err
-		}
-	}
-	return nil
+	return
 }
 
-// Capture a screen
+/*
+Get One screenshot
+Eg.
+	im, err := service.Screenshot()
+Todo.
+	directly read remote file by goadb
+*/
 func (s *Service) Screenshot() (im image.Image, err error) {
 	if !s.IsSupported() {
 		err = errors.New("sorry, minicap not supported")
@@ -202,25 +194,20 @@ func (s *Service) Screenshot() (im image.Image, err error) {
 	if err != nil {
 		return
 	}
-	//decode from jpg file
-	tmpDir := os.TempDir()
-	LFName := filepath.Join(tmpDir, fName)
-	cmds := []string{"pull", fmt.Sprintf("/data/local/tmp/%v", fName), LFName}
-	_, err = s.d.run(cmds...)
-	if err != nil {
-		return
-	}
-	s.d.shell(fmt.Sprintf("rm /data/local/tmp/%v", fName))
-
-	fout, err := os.Open(LFName)
+	fout, err := s.d.Device.OpenRead("/data/local/tmp/" + fName)
 	if err != nil {
 		return
 	}
 	im, err = jpeg.Decode(fout)
+	fout.Close()
 	return
 }
 
-//start rotation watcher
+/*
+Capture screen stream based on minicap
+Eg.
+	imageC, err := service.Capture()
+*/
 func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 	err = s.r.start()
 	if err != nil {
@@ -231,7 +218,11 @@ func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 		return
 	}
 
-	<-orienC
+	select {
+	case <-orienC:
+	case <-time.After(500 * time.Millisecond):
+		return nil, errors.New("cannot fetch rotation")
+	}
 	if err = s.captureMinicap(); err != nil {
 		return
 	}
@@ -266,11 +257,11 @@ func (s *Service) startMinicap(orientation int) (err error) {
 	s.closeMinicap()
 	params := fmt.Sprintf("%dx%d@%dx%d/%d", s.dispInfo.Width, s.dispInfo.Height,
 		s.dispInfo.Width, s.dispInfo.Height, orientation)
-	s.ps, err = s.d.shellNowait("LD_LIBRARY_PATH=/data/local/tmp", "/data/local/tmp/minicap", "-P", params, "-S")
-	if err != nil {
+	s.proc = s.d.buildCommand("LD_LIBRARY_PATH=/data/local/tmp", "/data/local/tmp/minicap", "-P", params, "-S")
+	if s.proc.Start() != nil {
 		return
 	}
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 50)
 	if _, err = s.d.run("forward", fmt.Sprintf("tcp:%d", s.port), "localabstract:minicap"); err != nil {
 		return
 	}
@@ -278,10 +269,10 @@ func (s *Service) startMinicap(orientation int) (err error) {
 	return
 }
 
-// close minicap service
 /*
-1. kill minicap ps
-2. remove adb forward
+Close Minicap Stream
+Eg.
+	err := service.Close()
 */
 func (s *Service) Close() (err error) {
 	s.mu.Lock()
@@ -291,26 +282,25 @@ func (s *Service) Close() (err error) {
 	}
 	s.closed = true
 	close(s.imageC)
-
-	if s.ps != nil && s.ps.Process != nil {
-		s.ps.Process.Signal(syscall.SIGTERM)
-	}
-	//kill minicap ps on device
-	err = s.d.killPs("minicap")
+	s.closeMinicap()
 	s.d.run("forward", "--remove", fmt.Sprintf("tcp:%d", s.port))
 	return
 }
 
 func (s *Service) closeMinicap() (err error) {
-	if s.ps != nil && s.ps.Process != nil {
-		s.ps.Process.Signal(syscall.SIGTERM)
+	if s.proc != nil && s.proc.Process != nil {
+		s.proc.Process.Signal(syscall.SIGTERM)
 	}
 	//kill minicap ps on device
-	err = s.d.killPs("minicap")
+	err = s.d.killProc("minicap")
 	return
 }
 
-//check if minicap service is closed.
+/*
+Check whether the minicap stream is closed.
+Eg.
+	closed := service.IsClosed()
+*/
 func (s *Service) IsClosed() (Closed bool) {
 	return s.closed
 }
@@ -371,7 +361,7 @@ func (s *Service) captureMinicap() (err error) {
 				if s.closed {
 					break
 				}
-				s.imBuffer = im
+				s.lastImage = im
 				select {
 				case s.imageC <- im:
 				default:
@@ -384,10 +374,15 @@ func (s *Service) captureMinicap() (err error) {
 	return nil
 }
 
-// get last screenshot
+/*
+Get last screen shot from minicap stream if stream is open. Otherwise, call Screenshot function.
+Eg.
+	im, err := service.LastScreenshot()
+*/
 func (s *Service) LastScreenshot() (im image.Image, err error) {
-	if s.imBuffer == nil {
-		return nil, errors.New("screenshot not found")
+	if s.lastImage == nil {
+		im, err = s.Screenshot()
+		return
 	}
-	return s.imBuffer, nil
+	return s.lastImage, nil
 }

@@ -9,48 +9,71 @@ package minicap
 
 import (
 	"bufio"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Rotation struct {
 	d           AdbDevice
 	orientation int
-	ps          *exec.Cmd
+	proc        *exec.Cmd
 	closed      bool
 	brd         *bufio.Reader
 }
 
-func newRotation(option Options) (r Rotation, err error) {
+func newRotationService(option Options) (r Rotation, err error) {
 	r = Rotation{}
-	r.d, err = NewAdbDevice(option.Serial, option.Adb)
+	r.d, err = newAdbDevice(option.Serial, option.Adb)
 	r.closed = true
+	return
+}
+
+//download file to device
+func (r *Rotation) download(path, url string) (err error) {
+	fout, err := r.d.Device.OpenWrite(path, 0755, time.Now())
+	if err != nil {
+		return
+	}
+	defer fout.Close()
+	response, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	_, err = io.Copy(fout, response.Body)
+	if err != nil {
+		return
+	}
 	return
 }
 
 //install rotationWatcher.apk
 func (r *Rotation) install() (err error) {
-	tmpDir := os.TempDir()
 	url := "https://github.com/NetEaseGame/AutomatorX/raw/master/atx/vendor/RotationWatcher.apk"
 	//check package
 	pkgName := "jp.co.cyberagent.stf.rotationwatcher"
 	plist, err := r.d.getPackageList()
+	if err != nil {
+		return
+	}
 	for _, val := range plist {
 		if strings.Contains(val, pkgName) {
 			return
 		}
 	}
 	//downlaod apk
-	fileName := filepath.Join(tmpDir, "RotationWatcher.apk")
-	err = downloadFile(fileName, url)
+	path := "/data/local/tmp/RotationWatcher.apk"
+	err = r.download(path, url)
 	if err != nil {
 		return
 	}
 	//install apk
-	_, err = r.d.run("install", "-rt", fileName)
+	_, err = r.d.shell("pm", "install", "-rt", path)
 	if err != nil {
 		return
 	}
@@ -66,14 +89,14 @@ func (r *Rotation) start() (err error) {
 	}
 	fields := strings.Split(strip(out), ":")
 	path := fields[len(fields)-1]
-	r.ps = r.d.buildCommand("CLASSPATH="+path, "app_process", "/system/bin", "jp.co.cyberagent.stf.rotationwatcher.RotationWatcher")
-	r.ps.Stderr = os.Stderr
-	stdoutReader, err := r.ps.StdoutPipe()
+	r.proc = r.d.buildCommand("CLASSPATH="+path, "app_process", "/system/bin", "jp.co.cyberagent.stf.rotationwatcher.RotationWatcher")
+	r.proc.Stderr = os.Stderr
+	stdoutReader, err := r.proc.StdoutPipe()
 	if err != nil {
 		return
 	}
 	r.brd = bufio.NewReader(stdoutReader)
-	return r.ps.Start()
+	return r.proc.Start()
 }
 
 func (r *Rotation) watch() (orienC <-chan int, err error) {
@@ -82,7 +105,10 @@ func (r *Rotation) watch() (orienC <-chan int, err error) {
 		for {
 			line, _, er := r.brd.ReadLine()
 			if er != nil {
-				break
+				// restart if rotation watcher crashed.
+				r.start()
+				continue
+				//break
 			}
 			tmp := strings.Replace(string(line), "\r", "", -1)
 			tmp = strings.Replace(tmp, "\n", "", -1)
@@ -92,6 +118,7 @@ func (r *Rotation) watch() (orienC <-chan int, err error) {
 			}
 			rC <- orientation
 		}
+		close(rC)
 	}()
 	orienC = rC
 	return

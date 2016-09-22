@@ -12,13 +12,9 @@ import (
 	"time"
 )
 
+var option = Options{"EP7333W7XB", 0, ""}
+
 func TestNewService(t *testing.T) {
-	serial := "EP7333W7XB" //your device serial here...
-	option := Options{}
-	option.Serial = serial
-	option.Host = "localhost"
-	option.Port = 2333
-	option.Adb = "adb"
 	_, err := NewService(option)
 	if err != nil {
 		t.Error("New Service error:" + err.Error())
@@ -28,12 +24,6 @@ func TestNewService(t *testing.T) {
 }
 
 func TestInstall(t *testing.T) {
-	serial := "EP7333W7XB" //your device serial here...
-	option := Options{}
-	option.Serial = serial
-	option.Host = "localhost"
-	option.Port = 2333
-	option.Adb = "adb"
 	m, err := NewService(option)
 	if err != nil {
 		t.Error("New Service error:" + err.Error())
@@ -48,12 +38,6 @@ func TestInstall(t *testing.T) {
 }
 
 func TestIsSupported(t *testing.T) {
-	serial := "EP7333W7XB" //your device serial here...
-	option := Options{}
-	option.Serial = serial
-	option.Host = "localhost"
-	option.Port = 2333
-	option.Adb = "adb"
 	m, err := NewService(option)
 	if err != nil {
 		t.Error("New Service error:" + err.Error())
@@ -73,12 +57,6 @@ func TestIsSupported(t *testing.T) {
 }
 
 func TestCaptureAndLastScreenShot(t *testing.T) {
-	serial := "EP7333W7XB" //your device serial here...
-	option := Options{}
-	option.Serial = serial
-	option.Host = "localhost"
-	option.Port = 2333
-	option.Adb = "adb"
 	m, err := NewService(option)
 	if err != nil {
 		t.Error("New Service error:" + err.Error())
@@ -112,12 +90,6 @@ func TestCaptureAndLastScreenShot(t *testing.T) {
 }
 
 func TestScreenshot(t *testing.T) {
-	serial := "EP7333W7XB" //your device serial here...
-	option := Options{}
-	option.Serial = serial
-	option.Host = "localhost"
-	option.Port = 2333
-	option.Adb = "adb"
 	m, err := NewService(option)
 	if err != nil {
 		t.Error("New Service error:" + err.Error())
@@ -138,32 +110,5 @@ func TestScreenshot(t *testing.T) {
 		t.Error("Screenshot Test error:" + err.Error())
 	} else {
 		t.Log("Screenshot Test Passed.")
-	}
-}
-
-func TestFps(t *testing.T) {
-	serial := "EP7333W7XB" //your device serial here...
-	option := Options{}
-	option.Serial = serial
-	option.Host = "localhost"
-	option.Port = 2333
-	option.Adb = "adb"
-	m, err := NewService(option)
-	if err != nil {
-		t.Error("New Service error:" + err.Error())
-		return
-	}
-	err = m.Install()
-	if err != nil {
-		t.Error("mincap service Install Test error:" + err.Error())
-		return
-	}
-
-	fps, err := m.FPS()
-	if err != nil {
-		t.Error("FPS Test error:" + err.Error())
-	} else {
-		t.Log("Fps data:", fps)
-		t.Log("FPS Test Passed.")
 	}
 }

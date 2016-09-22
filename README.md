@@ -26,35 +26,35 @@ import (
 )
 
 func main() {
-
 	serial := "EP7333W7XB" //your serial here...
-	option := Options{}
+	option := minicap.Options{}
 	option.Serial = serial
-	m, err := NewService(option)
+	m, err := minicap.NewService(option)
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 
 	err = m.Install()
 	if err != nil {
-		log.Println(err.Error())
-		return
+		log.Fatal(err)
 	}
 	log.Println(m.IsSupported())
 
 	log.Println("start to capture")
-	_, err := m.Capture()
+	imageC, err := m.Capture()
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("capture finished..")
+
+	for im := range(imageC) {
+		log.Println(im)
+	}
+
 	log.Println("Start to close minicap")
 	err = m.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
-
 ```

@@ -10,6 +10,7 @@ package minicap
 import (
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -17,10 +18,8 @@ import (
 	"unicode"
 )
 
-func strip(str string) (result string) {
-	str = strings.TrimSpace(str)
-	result = strings.TrimRightFunc(str, unicode.IsSpace)
-	return
+func strip(str string) string {
+	return strings.TrimFunc(str, unicode.IsSpace)
 }
 
 func splitLines(str string) (result []string) {
@@ -48,6 +47,24 @@ func downloadFile(fileName string, url string) (err error) {
 	return
 }
 
+func downloadFileToDevice(fileName, dir, url string) (err error) {
+	fout, err := os.Create(fileName)
+	if err != nil {
+		return
+	}
+	defer fout.Close()
+	response, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	_, err = io.Copy(fout, response.Body)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func randSeq(n int) string {
 	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	b := make([]rune, n)
@@ -57,12 +74,16 @@ func randSeq(n int) string {
 	return string(b)
 }
 
-func randPort() (int, error) {
-	var letters = []rune("12345")
-	b := make([]rune, 5)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+func randPort() (port int, err error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
 	}
-	port, err := strconv.Atoi(string(b))
-	return port, err
+	defer listener.Close()
+	addr := listener.Addr().String()
+	_, portString, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(portString)
 }

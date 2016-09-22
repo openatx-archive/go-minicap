@@ -9,7 +9,6 @@ package minicap
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -22,6 +21,7 @@ type AdbDevice struct {
 	Serial  string
 	AdbPath string
 	*adb.Adb
+	*adb.Device
 }
 
 type DisplayInfo struct {
@@ -31,10 +31,8 @@ type DisplayInfo struct {
 	Orientation int `json:"orientation"`
 }
 
-//new device client
-
-func NewAdbDevice(serial, AdbPath string) (d AdbDevice, err error) {
-	if len(strip(serial)) == 0 {
+func newAdbDevice(serial, AdbPath string) (d AdbDevice, err error) {
+	if serial == "" {
 		err = errors.New("serial cannot be empty")
 		return
 	}
@@ -47,19 +45,25 @@ func NewAdbDevice(serial, AdbPath string) (d AdbDevice, err error) {
 	d.Adb, err = adb.NewWithConfig(adb.ServerConfig{
 		Port: 5037,
 	})
+	d.Adb.StartServer()
+	d.Device = d.Adb.Device(adb.DeviceWithSerial(serial))
 	return
 }
 
-//adb shell
 func (d *AdbDevice) shell(cmds ...string) (out string, err error) {
 	args := []string{}
 	args = append(args, "-s", d.Serial, "shell")
 	args = append(args, cmds...)
-	args = append(args, ";echo GO_MINICAP_TAG:$?")
+	args = append(args, ";echo :$?")
 	output, err := exec.Command(d.AdbPath, args...).Output()
-	fields := strings.Split(string(output), "GO_MINICAP_TAG:")
-	out = fields[0]
-	if strip(fields[1]) != "0" {
+	if err != nil {
+		return
+	}
+	outStr := string(output)
+	idx := strings.LastIndexByte(outStr, ':')
+	statusCode := outStr[idx+1:]
+	out = outStr[:idx]
+	if strip(statusCode) != "0" {
 		return out, errors.New("adb shell error.")
 	}
 	return
@@ -71,21 +75,6 @@ func (d *AdbDevice) buildCommand(cmds ...string) (out *exec.Cmd) {
 	args = append(args, cmds...)
 	return exec.Command(d.AdbPath, args...)
 }
-
-func (d *AdbDevice) shellNowait(cmds ...string) (out *exec.Cmd, err error) {
-	args := []string{}
-	args = append(args, "-s", d.Serial, "shell")
-	args = append(args, cmds...)
-	cmd := exec.Command(d.AdbPath, args...)
-	err = cmd.Start()
-	if err != nil {
-		return
-	}
-	out = cmd
-	return
-}
-
-//adb command
 
 func (d *AdbDevice) run(cmds ...string) (out string, err error) {
 	args := []string{}
@@ -99,21 +88,8 @@ func (d *AdbDevice) run(cmds ...string) (out string, err error) {
 	return
 }
 
-func (d *AdbDevice) runNowait(cmds ...string) (out *exec.Cmd, err error) {
-	args := []string{}
-	args = append(args, "-s", d.Serial)
-	args = append(args, cmds...)
-	cmd := exec.Command(d.AdbPath, args...)
-	err = cmd.Start()
-	if err != nil {
-		return
-	}
-	out = cmd
-	return
-}
-
 func (d *AdbDevice) getProp(key string) (result string, err error) {
-	out, err := d.shell("getprop " + key)
+	out, err := d.shell("getprop", key)
 	if err != nil {
 		return
 	}
@@ -121,20 +97,14 @@ func (d *AdbDevice) getProp(key string) (result string, err error) {
 	return
 }
 
-//file check
-func (d *AdbDevice) isFileExisted(filename string) (bool, error) {
-	out, err := d.shell("ls " + filename)
+func (d *AdbDevice) isFileExists(filename string) bool {
+	_, err := d.Device.Stat(filename)
 	if err != nil {
-		return false, err
+		return false
 	}
-	if strings.Contains(string(out), "No such file or directory") {
-		return false, nil
-	} else {
-		return true, nil
-	}
+	return true
 }
 
-//get display info
 func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 	out, err := d.shell("dumpsys display")
 	if err != nil {
@@ -164,15 +134,14 @@ func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 	}
 	patten = regexp.MustCompile(`orientation=(\d+)`)
 	out, err = d.shell("dumpsys SurfaceFlinger")
-	if info.Height > info.Width {
-		info.Orientation = 0
-	} else {
-		info.Orientation = 1
-	}
-	if err != nil || !patten.MatchString(string(out)) {
+	if err != nil {
 		return
 	}
 	m := patten.FindStringSubmatch(string(out))
+	if m == nil {
+		err = errors.New("cannot find orientation info")
+		return
+	}
 	if len(m) >= 2 {
 		orientation, err := strconv.Atoi(m[1])
 		if err != nil {
@@ -183,7 +152,6 @@ func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 	return
 }
 
-//get package list
 func (d *AdbDevice) getPackageList() (plist []string, err error) {
 	out, err := d.shell("pm list packages")
 	if err != nil {
@@ -193,12 +161,12 @@ func (d *AdbDevice) getPackageList() (plist []string, err error) {
 	for i := 0; i < len(plist); i++ {
 		plist[i] = strings.Replace(plist[i], "\r", "", -1)
 		plist[i] = strings.Replace(plist[i], "\n", "", -1)
-		plist[i] = strings.Replace(plist[i], " ", "", -1)
+		plist[i] = strip(plist[i])
 	}
 	return
 }
 
-func (d *AdbDevice) killPs(psName string) (err error) {
+func (d *AdbDevice) killProc(psName string) (err error) {
 	out, err := d.shell("ps")
 	if err != nil {
 		return
@@ -222,7 +190,7 @@ func (d *AdbDevice) killPs(psName string) (err error) {
 			field := strings.Fields(val)
 			if strings.Contains(field[idxName+1], psName) {
 				pid := field[idxPs]
-				_, err := d.shell(fmt.Sprintf("kill -9 %v", pid))
+				_, err := d.shell("kill", "-9", pid)
 				if err != nil {
 					return err
 				}
