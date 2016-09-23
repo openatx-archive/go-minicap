@@ -61,7 +61,7 @@ func main() {
 
 ## demo
 
-you can run the [demo](/demo/demo.go)
+you can run the [demo](/demo/main.go)
 
 then you can visit http://127.0.0.1:5678 to see the screen in real-time. Like,
 
