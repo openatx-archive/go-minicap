@@ -27,7 +27,6 @@ type AdbDevice struct {
 type DisplayInfo struct {
 	Width       int `json:"width"`
 	Height      int `json:"height"`
-	Density     int `json:"density"`
 	Orientation int `json:"orientation"`
 }
 
@@ -98,7 +97,14 @@ func (d *AdbDevice) getProp(key string) (result string, err error) {
 }
 
 func (d *AdbDevice) isFileExists(filename string) bool {
+	/*  // Stat takes too long, almost 2 sec
 	_, err := d.Device.Stat(filename)
+	if err != nil {
+		return false
+	}
+	return true
+	*/
+	_, err := d.shell("test", "-f", filename)
 	if err != nil {
 		return false
 	}
@@ -111,43 +117,27 @@ func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 		return
 	}
 	lines := splitLines(string(out))
-	patten := regexp.MustCompile(`.*PhysicalDisplayInfo{(?P<width>\d+) x (?P<height>\d+), .*, density (?P<density>[\d.]+).*`)
+	patten := regexp.MustCompile(`.*DisplayViewport{valid=true, .*orientation=(?P<orientation>\d+), .*deviceWidth=(?P<width>\d+), deviceHeight=(?P<height>\d+).*`)
 	for _, line := range lines {
-		if !patten.MatchString(line) {
+		m := patten.FindStringSubmatch(line)
+		if m == nil {
 			continue
 		}
-		m := patten.FindStringSubmatch(line)
 		if len(m) >= 4 {
-			width, err := strconv.Atoi(m[1])
+			orientation, err := strconv.Atoi(m[1])
+			if err == nil {
+				info.Orientation = orientation
+			}
+			width, err := strconv.Atoi(m[2])
 			if err == nil {
 				info.Width = width
 			}
-			height, err := strconv.Atoi(m[2])
+			height, err := strconv.Atoi(m[3])
 			if err == nil {
 				info.Height = height
 			}
-			density, err := strconv.Atoi(m[3])
-			if err == nil {
-				info.Density = density
-			}
+			break
 		}
-	}
-	patten = regexp.MustCompile(`orientation=(\d+)`)
-	out, err = d.shell("dumpsys SurfaceFlinger")
-	if err != nil {
-		return
-	}
-	m := patten.FindStringSubmatch(string(out))
-	if m == nil {
-		err = errors.New("cannot find orientation info")
-		return
-	}
-	if len(m) >= 2 {
-		orientation, err := strconv.Atoi(m[1])
-		if err != nil {
-			return info, err
-		}
-		info.Orientation = orientation
 	}
 	return
 }

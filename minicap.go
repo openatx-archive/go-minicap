@@ -217,22 +217,32 @@ func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 	if err != nil {
 		return
 	}
+	s.dispInfo, err = s.d.getDisplayInfo()
+	if err != nil {
+		return
+	}
+	if err = s.startMinicap(s.dispInfo.Orientation); err != nil {
+		return
+	}
+	if err = s.captureMinicap(); err != nil {
+		return
+	}
 
 	select {
 	case <-orienC:
 	case <-time.After(500 * time.Millisecond):
 		return nil, errors.New("cannot fetch rotation")
 	}
-	if err = s.captureMinicap(); err != nil {
-		return
-	}
+
 	go func() {
 		for {
 			orientation := <-orienC
-			if err := s.startMinicap(orientation); err != nil {
-				break
+			if orientation != s.dispInfo.Orientation {
+				if err := s.startMinicap(orientation); err != nil {
+					break
+				}
+				time.Sleep(time.Duration(10+rand.Intn(100)) * time.Millisecond)
 			}
-			time.Sleep(time.Duration(10+rand.Intn(100)) * time.Millisecond)
 		}
 	}()
 	return s.imageC, nil
@@ -253,7 +263,6 @@ func (s *Service) startMinicap(orientation int) (err error) {
 	if s.dispInfo.Width > s.dispInfo.Height {
 		s.dispInfo.Width, s.dispInfo.Height = s.dispInfo.Height, s.dispInfo.Width
 	}
-
 	s.closeMinicap()
 	params := fmt.Sprintf("%dx%d@%dx%d/%d", s.dispInfo.Width, s.dispInfo.Height,
 		s.dispInfo.Width, s.dispInfo.Height, orientation)
@@ -261,7 +270,7 @@ func (s *Service) startMinicap(orientation int) (err error) {
 	if s.proc.Start() != nil {
 		return
 	}
-	time.Sleep(time.Millisecond * 50)
+	time.Sleep(time.Millisecond)
 	if _, err = s.d.run("forward", fmt.Sprintf("tcp:%d", s.port), "localabstract:minicap"); err != nil {
 		return
 	}

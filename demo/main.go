@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	"github.com/BigWavelet/go-minicap"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/nfnt/resize"
 )
@@ -89,11 +88,9 @@ func hImageWs(w http.ResponseWriter, r *http.Request) {
 }
 
 func startWebServer(port int) {
-	r := mux.NewRouter()
-	r.HandleFunc("/", hIndex)
+	http.HandleFunc("/", hIndex)
 	//r.HandleFunc("/ws/screen", wsPerf)
-	r.HandleFunc("/ws", hImageWs)
-	http.Handle("/", r)
+	http.HandleFunc("/ws", hImageWs)
 	log.Println("start webserver here...")
 	http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 }
