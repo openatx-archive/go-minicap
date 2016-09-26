@@ -15,6 +15,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"os/exec"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	//	"github.com/pixiv/go-libjpeg/jpeg"  // not work on windows
 )
 
 var (
@@ -238,6 +240,7 @@ func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 		for {
 			orientation := <-orienC
 			if orientation != s.dispInfo.Orientation {
+				s.dispInfo.Orientation = orientation
 				if err := s.startMinicap(orientation); err != nil {
 					break
 				}
@@ -266,6 +269,7 @@ func (s *Service) startMinicap(orientation int) (err error) {
 	s.closeMinicap()
 	params := fmt.Sprintf("%dx%d@%dx%d/%d", s.dispInfo.Width, s.dispInfo.Height,
 		s.dispInfo.Width, s.dispInfo.Height, orientation)
+	log.Println(params)
 	s.proc = s.d.buildCommand("LD_LIBRARY_PATH=/data/local/tmp", "/data/local/tmp/minicap", "-P", params, "-S")
 	if s.proc.Start() != nil {
 		return
