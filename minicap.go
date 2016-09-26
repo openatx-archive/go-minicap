@@ -15,7 +15,6 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"os/exec"
@@ -269,7 +268,6 @@ func (s *Service) startMinicap(orientation int) (err error) {
 	s.closeMinicap()
 	params := fmt.Sprintf("%dx%d@%dx%d/%d", s.dispInfo.Width, s.dispInfo.Height,
 		s.dispInfo.Width, s.dispInfo.Height, orientation)
-	log.Println(params)
 	s.proc = s.d.buildCommand("LD_LIBRARY_PATH=/data/local/tmp", "/data/local/tmp/minicap", "-P", params, "-S")
 	if s.proc.Start() != nil {
 		return
