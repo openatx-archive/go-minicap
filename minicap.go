@@ -10,10 +10,8 @@ import (
 	"io"
 	"math/rand"
 	"net"
-	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	//	"github.com/pixiv/go-libjpeg/jpeg"  // not work on windows
 )
@@ -33,7 +31,6 @@ type Service struct {
 
 	lforwardPort int // local forward port
 	d            AdbDevice
-	proc         *exec.Cmd
 	r            Rotation
 	dispInfo     DisplayInfo
 
@@ -43,13 +40,6 @@ type Service struct {
 	lastImage image.Image
 }
 
-/*
-Example:
-	options := Option{
-		Serial: "cff",
-	}
-	service := minicap.NewService(options)
-*/
 func NewService(opt Options) (s *Service, err error) {
 	s = &Service{
 		AdbPort: 5037,
@@ -68,10 +58,8 @@ func NewService(opt Options) (s *Service, err error) {
 	return
 }
 
-/*
-Install minicap and minicap.so to /data/local/tmp
-Source file are download from github.com/openstf/minicap
-*/
+// Install minicap and minicap.so to /data/local/tmp
+// files downloaded from github.com/openstf/minicap
 func (s *Service) Install() (err error) {
 	err = s.r.install()
 	if err != nil {
@@ -229,8 +217,8 @@ func (s *Service) runMinicap(orientation int) (err error) {
 	s.close()
 	params := fmt.Sprintf("%dx%d@%dx%d/%d", s.dispInfo.Width, s.dispInfo.Height,
 		s.dispInfo.Width, s.dispInfo.Height, orientation)
-	s.proc = s.d.buildCommand("LD_LIBRARY_PATH=/data/local/tmp", "/data/local/tmp/minicap", "-P", params, "-S")
-	if s.proc.Start() != nil {
+	cmd := s.d.buildCommand("LD_LIBRARY_PATH=/data/local/tmp", "/data/local/tmp/minicap", "-P", params, "-S")
+	if err = cmd.Start(); err != nil {
 		return
 	}
 	time.Sleep(time.Millisecond) // ?
@@ -262,12 +250,7 @@ func (s *Service) Close() (err error) {
 }
 
 func (s *Service) close() (err error) {
-	if s.proc != nil && s.proc.Process != nil {
-		s.proc.Process.Signal(syscall.SIGTERM)
-	}
-	//kill minicap ps on device
-	err = s.d.killProc("minicap")
-	return
+	return s.d.killProc("minicap")
 }
 
 // Check whether the minicap stream is closed.

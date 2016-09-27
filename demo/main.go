@@ -14,13 +14,10 @@ import (
 	minicap "github.com/openatx/go-minicap"
 )
 
-var imC <-chan image.Image
-var upgrader = websocket.Upgrader{}
-
-type WebConfig struct {
-	User    string
-	Version string
-}
+var (
+	imC      <-chan image.Image
+	upgrader = websocket.Upgrader{}
+)
 
 func test() {
 	m, err := minicap.NewService(minicap.Options{Serial: "EP7333W7XB"})
@@ -88,15 +85,14 @@ func hImageWs(w http.ResponseWriter, r *http.Request) {
 }
 
 func startWebServer(port int) {
+	log.Printf("server listern on http://localhost:%d ...", port)
+
 	http.HandleFunc("/", hIndex)
-	//r.HandleFunc("/ws/screen", wsPerf)
 	http.HandleFunc("/ws", hImageWs)
-	log.Println("start webserver here...")
 	http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 }
 
 func main() {
 	test()
-	startWebServer(5678)
-
+	startWebServer(7000)
 }

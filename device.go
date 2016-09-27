@@ -168,12 +168,6 @@ func (d *AdbDevice) killProc(psName string) (err error) {
 				break
 			}
 		}
-		/*for idx, val := range strings.Fields(fields[0]) {
-			if val == "NAME" {
-				idxName = idx
-				break
-			}
-		}*/
 		for _, val := range fields[1:] {
 			field := strings.Fields(val)
 			if strings.Contains(val, psName) {
