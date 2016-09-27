@@ -1,17 +1,16 @@
 
-[![GoDoc](https://godoc.org/github.com/BigWavelet/go-minicap?status.svg)](https://godoc.org/github.com/BigWavelet/go-minicap)
+[![GoDoc](https://godoc.org/github.com/openatx/go-minicap?status.svg)](https://godoc.org/github.com/openatx/go-minicap)
 
-This is a minicap library written based on golang.
+This is a [minicap](https://github.com/openstf/minicap) library written based on golang.
 
 
 
 ## Usage
-
-you can fetch the library by
-```shell
-go get github.com/openatx/go-minicap
+```sh
+go get -v github.com/openatx/go-minicap
 ```
-then you can use it as follows
+
+Code example
 
 ```go
 package main
@@ -66,3 +65,6 @@ you can run the [demo](/demo/main.go)
 then you can visit http://127.0.0.1:5678 to see the screen in real-time. Like,
 
 ![](demo/demo.png)
+
+## LICENSE
+Under [MIT](LICENSE)
