@@ -9,9 +9,9 @@ import (
 	"log"
 	"net/http"
 
-	minicap "github.com/BigWavelet/go-minicap"
 	"github.com/gorilla/websocket"
 	"github.com/nfnt/resize"
+	minicap "github.com/openatx/go-minicap"
 )
 
 var imC <-chan image.Image
