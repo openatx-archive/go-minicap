@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var option = Options{"EP7333W7XB", 0, ""}
+var option = Options{"EP7333W7XB", 0, ""} // Better to choose any connected device
 
 func TestNewService(t *testing.T) {
 	_, err := NewService(option)
