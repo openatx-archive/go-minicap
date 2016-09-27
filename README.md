@@ -9,7 +9,7 @@ This is a minicap library written based on golang.
 
 you can fetch the library by
 ```shell
-go get github.com/BigWavelet/go-minicap
+go get github.com/openatx/go-minicap
 ```
 then you can use it as follows
 
@@ -22,7 +22,7 @@ import (
 	"image/jpeg"
 	"os"
 	"time"
-    "github.com/BigWavelet/go-minicap"
+    "github.com/openatx/go-minicap"
 )
 
 func main() {

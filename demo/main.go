@@ -9,7 +9,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/BigWavelet/go-minicap"
+	minicap "github.com/BigWavelet/go-minicap"
 	"github.com/gorilla/websocket"
 	"github.com/nfnt/resize"
 )
