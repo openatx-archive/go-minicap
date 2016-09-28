@@ -199,6 +199,126 @@ func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 	return s.imageC, nil
 }
 
+// Capture screen stream based on minicap, with limited frequency
+func (s *Service) CaptureFreqLimited(freq int) (imageC <-chan image.Image, err error) {
+	err = s.r.start()
+	if err != nil {
+		return
+	}
+	orienC, err := s.r.watch()
+	if err != nil {
+		return
+	}
+	s.dispInfo, err = s.d.getDisplayInfo()
+	if err != nil {
+		return
+	}
+	if err = s.runMinicap(s.dispInfo.Orientation); err != nil {
+		return
+	}
+	if err = s.startReadFromSocket(); err != nil {
+		return
+	}
+
+	// TODO(ssx): too slow here
+	select {
+	case <-orienC:
+	case <-time.After(time.Second):
+		return nil, errors.New("cannot fetch rotation")
+	}
+
+	go func() {
+		for {
+			orientation := <-orienC
+			if orientation != s.dispInfo.Orientation {
+				s.dispInfo.Orientation = orientation
+				if err := s.runMinicap(orientation); err != nil {
+					break
+				}
+				time.Sleep(time.Duration(10+rand.Intn(100)) * time.Millisecond)
+			}
+		}
+	}()
+
+	imgLmtC := make(chan image.Image, 1)
+	go func() {
+		interval := time.Duration(1000 / freq)
+		lstTime := time.Now()
+		for im := range s.imageC {
+			if time.Now().After(lstTime.Add(interval * time.Millisecond)) {
+				imgLmtC <- im
+				lstTime = time.Now()
+			}
+
+		}
+	}()
+
+	return imgLmtC, nil
+}
+
+// Capture screen stream based on minicap, with fixed frequency
+func (s *Service) CaptureFreqFixed(freq int) (imageC <-chan image.Image, err error) {
+	err = s.r.start()
+	if err != nil {
+		return
+	}
+	orienC, err := s.r.watch()
+	if err != nil {
+		return
+	}
+	s.dispInfo, err = s.d.getDisplayInfo()
+	if err != nil {
+		return
+	}
+	if err = s.runMinicap(s.dispInfo.Orientation); err != nil {
+		return
+	}
+	if err = s.startReadFromSocket(); err != nil {
+		return
+	}
+
+	// TODO(ssx): too slow here
+	select {
+	case <-orienC:
+	case <-time.After(time.Second):
+		return nil, errors.New("cannot fetch rotation")
+	}
+
+	go func() {
+		for {
+			orientation := <-orienC
+			if orientation != s.dispInfo.Orientation {
+				s.dispInfo.Orientation = orientation
+				if err := s.runMinicap(orientation); err != nil {
+					break
+				}
+				time.Sleep(time.Duration(10+rand.Intn(100)) * time.Millisecond)
+			}
+		}
+	}()
+
+	imgFxdC := make(chan image.Image, 1)
+	go func() {
+		interval := int64(1e9 / freq)
+		for {
+			start := time.Now()
+			select {
+			case im := <-s.imageC:
+				imgFxdC <- im
+			case <-time.After(time.Millisecond):
+				im, err := s.LastScreenshot()
+				if err != nil {
+					imgFxdC <- im
+				}
+			}
+			duration := time.Since(start).Nanoseconds()
+			time.Sleep(time.Duration(interval-duration) * time.Nanosecond)
+		}
+	}()
+
+	return imgFxdC, nil
+}
+
 // Start Minicap until the minicap started
 func (s *Service) runMinicap(orientation int) (err error) {
 	if !s.IsSupported() {

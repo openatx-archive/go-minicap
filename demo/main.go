@@ -28,7 +28,7 @@ func test() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	imC, err = m.Capture()
+	imC, err = m.CaptureFreqFixed(20)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +52,6 @@ func hImageWs(w http.ResponseWriter, r *http.Request) {
 		buf.Reset()
 		log.Println("Prepare websocket send", imC)
 		for im := range imC {
-			log.Println("encode image")
 			select {
 			case <-done:
 				log.Println("finished")
