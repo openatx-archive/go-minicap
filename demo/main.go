@@ -28,7 +28,8 @@ func test() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	imC, err = m.CaptureFreqFixed(20)
+	imC, err = m.Capture()
+	imC = m.LimitedSampling(imC, 10)
 	if err != nil {
 		log.Fatal(err)
 	}
