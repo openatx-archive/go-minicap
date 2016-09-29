@@ -10,8 +10,8 @@ import (
 
 func TestLimitedSampling(t *testing.T) {
 	imgC := make(chan image.Image, 2)
-	rgba := image.NewRGBA(image.Rect(0, 0, 20, 20))
-	imgC <- rgba
+	rgba := image.NewRGBA(image.Rect(0, 0, 50, 50))
+	imgC <- image.NewRGBA(image.Rect(0, 0, 20, 20))
 	imgC <- rgba
 
 	assert := assert.New(t)
