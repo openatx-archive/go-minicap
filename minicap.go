@@ -222,24 +222,6 @@ func (s *Service) FixedSampling(imC <-chan image.Image, freq int) <-chan image.I
 	return imgFxdC
 }
 
-//Sampling minicap with limited sampling rate
-func (s *Service) LimitedSampling(imC <-chan image.Image, freq int) <-chan image.Image {
-	imgLmtC := make(chan image.Image, 1)
-	go func() {
-		interval := time.Duration(1000 / freq)
-		lstTime := time.Now()
-		for im := range imC {
-			if time.Now().After(lstTime.Add(interval * time.Millisecond)) {
-				imgLmtC <- im
-				lstTime = time.Now()
-			}
-
-		}
-	}()
-
-	return imgLmtC
-}
-
 // Start Minicap until the minicap started
 func (s *Service) runMinicap(orientation int) (err error) {
 	if !s.IsSupported() {
