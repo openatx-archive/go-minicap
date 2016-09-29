@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg"
+	"image/jpeg"
 	"io"
 	"math/rand"
 	"net"
 	"strings"
 	"sync"
 	"time"
-	//	"github.com/pixiv/go-libjpeg/jpeg"  // not work on windows
+	// _ "github.com/pixiv/go-libjpeg/jpeg" // not work on windows
 )
 
 var (
@@ -170,6 +170,7 @@ func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 	if err != nil {
 		return
 	}
+	// log.Println(s.dispInfo)
 	if err = s.runMinicap(s.dispInfo.Orientation); err != nil {
 		return
 	}
@@ -330,7 +331,8 @@ func (s *Service) startReadFromSocket() (err error) {
 				}
 				lr := &io.LimitedReader{bufrd, int64(size)}
 				var im image.Image
-				im, _, err = image.Decode(lr)
+				im, err = jpeg.Decode(lr)
+				// im, _, err = image.Decode(lr)
 				if err != nil {
 					break
 				}

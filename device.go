@@ -9,6 +9,8 @@ package minicap
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -62,7 +64,7 @@ func (d *AdbDevice) shell(cmds ...string) (out string, err error) {
 	statusCode := outStr[idx+1:]
 	out = outStr[:idx]
 	if strip(statusCode) != "0" {
-		return out, errors.New("adb shell error.")
+		return out, fmt.Errorf("adb shell error: adb %v", args)
 	}
 	return
 }
@@ -116,28 +118,31 @@ func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 		return
 	}
 	lines := splitLines(string(out))
-	patten := regexp.MustCompile(`.*DisplayViewport{valid=true, .*orientation=(?P<orientation>\d+), .*deviceWidth=(?P<width>\d+), deviceHeight=(?P<height>\d+).*`)
+	patten := regexp.MustCompile(`.*DisplayViewport{valid=true,.*orientation=(\d+),.*deviceWidth=(\d+), deviceHeight=(\d+).*`)
 	for _, line := range lines {
 		m := patten.FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}
-		if len(m) >= 4 {
-			orientation, err := strconv.Atoi(m[1])
-			if err == nil {
-				info.Orientation = orientation
-			}
-			width, err := strconv.Atoi(m[2])
-			if err == nil {
-				info.Width = width
-			}
-			height, err := strconv.Atoi(m[3])
-			if err == nil {
-				info.Height = height
-			}
+		info.Orientation, err = strconv.Atoi(m[1])
+		if err != nil {
 			break
 		}
+		info.Width, err = strconv.Atoi(m[2])
+		if err != nil {
+			break
+		}
+		info.Height, err = strconv.Atoi(m[3])
+		if err != nil {
+			break
+		}
+		return
 	}
+	log.Println(info)
+	// TODO(ssx): use some other method
+	// info.Orientation = 0
+	// info.Width = 720
+	// info.Height = 1280
 	return
 }
 
