@@ -128,6 +128,7 @@ func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 		if err != nil {
 			break
 		}
+		info.Orientation = info.Orientation * 90
 		info.Width, err = strconv.Atoi(m[2])
 		if err != nil {
 			break
@@ -136,6 +137,7 @@ func (d *AdbDevice) getDisplayInfo() (info DisplayInfo, err error) {
 		if err != nil {
 			break
 		}
+
 		return
 	}
 	log.Println(info)

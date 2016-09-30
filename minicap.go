@@ -33,6 +33,7 @@ type Service struct {
 	d            AdbDevice
 	r            Rotation
 	dispInfo     DisplayInfo
+	maxReDialCnt int
 
 	closed    bool
 	imageC    chan image.Image
@@ -42,9 +43,10 @@ type Service struct {
 
 func NewService(opt Options) (s *Service, err error) {
 	s = &Service{
-		AdbPort: 5037,
-		AdbHost: "localhost",
-		closed:  true,
+		AdbPort:      5037,
+		AdbHost:      "localhost",
+		closed:       true,
+		maxReDialCnt: 10,
 	}
 	s.d, err = newAdbDevice(opt.Serial, opt.Adb)
 	if err != nil {
@@ -180,7 +182,14 @@ func (s *Service) Capture() (imageC <-chan image.Image, err error) {
 
 	// TODO(ssx): too slow here
 	select {
-	case <-orienC:
+	case orientation := <-orienC:
+		if orientation != s.dispInfo.Orientation {
+			s.dispInfo.Orientation = orientation
+			if err := s.runMinicap(orientation); err != nil {
+				break
+			}
+			time.Sleep(time.Duration(10+rand.Intn(100)) * time.Millisecond)
+		}
 	case <-time.After(time.Second):
 		return nil, errors.New("cannot fetch rotation")
 	}
@@ -289,16 +298,22 @@ func (s *Service) startReadFromSocket() (err error) {
 	if err != nil {
 		return
 	}
-	err = s.runMinicap(s.dispInfo.Orientation * 90)
+	/*err = s.runMinicap(s.dispInfo.Orientation)
 	if err != nil {
 		return
-	}
+	}*/
 	s.imageC = make(chan image.Image, 1)
 	go func() {
+		idxReDialCnt := 0
 		for {
 			conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", s.AdbHost, s.lforwardPort))
 			if err != nil {
-				continue
+				if idxReDialCnt < s.maxReDialCnt {
+					idxReDialCnt += 1
+					continue
+				} else {
+					break
+				}
 			}
 			var pid, rw, rh, vw, vh uint32
 			var version uint8
